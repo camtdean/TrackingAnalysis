@@ -9,7 +9,6 @@
 #include <Trkr_Reco.C>
 #include <Trkr_RecoInit.C>
 #include <Trkr_TpcReadoutInit.C>
-#include <QA.C>
 #include <Calo_Calib.C>
 
 #include <ffamodules/CDBInterface.h>
@@ -34,24 +33,13 @@
 #include <tpctrackreco/Tpc_PolyTrackReco.h>
 #include <tpctrackreco/Tpc_PolyTrackVertexer.h>
 
-#include <mvtxrawhitqa/MvtxRawHitQA.h>
-#include <inttrawhitqa/InttRawHitQA.h>
-#include <tpcqa/TpcRawHitQA.h>
-#include <trackingqa/InttClusterQA.h>
-#include <trackingqa/MicromegasClusterQA.h>
-#include <trackingqa/MvtxClusterQA.h>
-#include <trackingqa/TpcClusterQA.h>
-#include <trackingqa/SiliconSeedsQA.h>
-#include <trackingqa/TpcSeedsQA.h>
-#include <trackingqa/TrackFittingQA.h>
-#include <trackingqa/TpcSiliconQA.h>
-#include <trackingqa/VertexQA.h>
 #include <trackreco/PHActsTrackProjection.h>
 #include <trackreco/DSTClusterPruning.h>
 
 #include <caloreco/RawClusterBuilderTemplate.h>
 
 #include <kfparticle_sphenix/KFParticle_sPHENIX.h>
+#include <nnscalemap/nnscalemap.h>
 
 #include <stdio.h>
 
@@ -65,6 +53,7 @@ R__LOAD_LIBRARY(libphool.so)
 R__LOAD_LIBRARY(libcdbobjects.so)
 R__LOAD_LIBRARY(libPHGarfield.so)
 R__LOAD_LIBRARY(libtpctrackreco.so)
+R__LOAD_LIBRARY(libNNScaleMap.so)
 
 bool IsListFile = false;
 bool IsDstFile = false;
@@ -328,10 +317,6 @@ void Fun4All_HF(const int nEvents = 500,
         }
 
         Micromegas_HitUnpacking();
-
-        se->registerSubsystem(new MvtxRawHitQA);
-        se->registerSubsystem(new InttRawHitQA);
-        se->registerSubsystem(new TpcRawHitQA);
     }
 
     if (DoClustering)
@@ -345,10 +330,6 @@ void Fun4All_HF(const int nEvents = 500,
         Micromegas_Clustering();
 
         Reject_Laser_Events();
-
-        se->registerSubsystem(new MvtxClusterQA);
-        se->registerSubsystem(new InttClusterQA);
-        se->registerSubsystem(new MicromegasClusterQA);
     }
 
     if (DoSeeding)
@@ -408,13 +389,6 @@ void Fun4All_HF(const int nEvents = 500,
         clusterPruner->pruneAllSeeds();
         se->registerSubsystem(clusterPruner);
 
-        se->registerSubsystem(new TpcClusterQA);
-
-        auto siliconqa = new SiliconSeedsQA;
-        siliconqa->setTrackMapName("SiliconSvtxTrackMap");
-        siliconqa->setVertexMapName("SiliconSvtxVertexMap");
-        se->registerSubsystem(siliconqa);
-
         auto convertertpc = new TrackSeedTrackMapConverter("TpcSeedConverter");
         // Default set to full SvtxTrackSeeds. Can be set to
         // SiliconTrackSeedContainer or TpcTrackSeedContainer
@@ -436,12 +410,6 @@ void Fun4All_HF(const int nEvents = 500,
         findertpc->setTrackMapName("TpcSvtxTrackMap");
         findertpc->setVertexMapName("TpcSvtxVertexMap");
         se->registerSubsystem(findertpc);
-
-        auto tpcqa = new TpcSeedsQA;
-        tpcqa->setTrackMapName("TpcSvtxTrackMap");
-        tpcqa->setVertexMapName("TpcSvtxVertexMap");
-        tpcqa->setSegment(rc->get_IntFlag("RUNSEGMENT"));
-        se->registerSubsystem(tpcqa);
     }
 
     if (DoFitting)
@@ -449,10 +417,6 @@ void Fun4All_HF(const int nEvents = 500,
         Tracking_Reco_SiTpcTrackMatching_run2pp("TRKR_CLUSTER_SEED");
         Tracking_Reco_TrackFit_run2pp("", "TRKR_CLUSTER_SEED");
         Tracking_Reco_Vertex_run2pp("TRKR_CLUSTER_SEED");
-
-        se->registerSubsystem(new TpcSiliconQA);
-        se->registerSubsystem(new TrackFittingQA);
-        se->registerSubsystem(new VertexQA);
     }
 
     if (get_calo_info)
@@ -486,80 +450,56 @@ void Fun4All_HF(const int nEvents = 500,
         se->registerSubsystem(ClusterBuilder);
     }
 
+    if (doRescale)
+    {
+      std::string momReweightFile = "/sphenix/u/cdean/analysis/NNScaleMap/run" + to_string(runnumber) + "/kappa_lookup.csv";
+
+      auto* momScale = new NNScaleMap("NNScaleMap");
+      momScale->setUseCDB(false);  // NNScaleMap defaults to CDB lookup; use the fixed local file instead
+      momScale->setKappaLookupFile(momReweightFile.c_str());
+      momScale->setOutputTrackMapName(momReweightTrackMap.c_str());
+      momScale->setScaleCovariance(true);
+      se->registerSubsystem(momScale);
+    }
+
     output_dir = outDir;
 
-    if (run_pipi_reco)
-        create_hf_directories(pipi_reconstruction_name, pipi_output_dir, pipi_output_reco_file);
-    if (run_Kpi_reco)
-        create_hf_directories(Kpi_reconstruction_name, Kpi_output_dir, Kpi_output_reco_file);
-    if (run_KK_reco)
-        create_hf_directories(KK_reconstruction_name, KK_output_dir, KK_output_reco_file);
-    if (run_ppi_reco)
-        create_hf_directories(ppi_reconstruction_name, ppi_output_dir, ppi_output_reco_file);
-    if (run_ee_reco)
-        create_hf_directories(ee_reconstruction_name, ee_output_dir, ee_output_reco_file);
+    if (run_pipi_reco) create_hf_directories(pipi_reconstruction_name, pipi_output_dir, pipi_output_reco_file);
+    if (run_KK_reco) create_hf_directories(KK_reconstruction_name, KK_output_dir, KK_output_reco_file);
+    if (run_ppi_reco) create_hf_directories(ppi_reconstruction_name, ppi_output_dir, ppi_output_reco_file);
+    if (run_Kpi_reco) create_hf_directories(Kpi_reconstruction_name, Kpi_output_dir, Kpi_output_reco_file);
+    if (run_Kpipi_reco) create_hf_directories(Kpipi_reconstruction_name, Kpipi_output_dir, Kpipi_output_reco_file);
+    if (run_KKpi_reco) create_hf_directories(KKpi_reconstruction_name, KKpi_output_dir, KKpi_output_reco_file);
+    if (run_pKpi_reco) create_hf_directories(pKpi_reconstruction_name, pKpi_output_dir, pKpi_output_reco_file);
+    if (run_Lambdapi_reco) create_hf_directories(Lambdapi_reconstruction_name, Lambdapi_output_dir, Lambdapi_output_reco_file);
+    if (run_ee_reco) create_hf_directories(ee_reconstruction_name, ee_output_dir, ee_output_reco_file);
 
-    if (run_pipi_reco || run_Kpi_reco || run_KK_reco || run_ppi_reco || run_ee_reco)
-        init_kfp_dependencies();
+    if (run_pipi_reco || run_KK_reco || run_ppi_reco || run_Kpi_reco || run_Kpipi_reco || run_KKpi_reco || run_pKpi_reco || run_Lambdapi_reco || run_ee_reco) init_kfp_dependencies();
 
-    if (run_pipi_reco)
-        reconstruct_pipi_mass();
-    if (run_Kpi_reco)
-        reconstruct_Kpi_mass();
-    if (run_KK_reco)
-        reconstruct_KK_mass();
-    if (run_ppi_reco)
-        reconstruct_ppi_mass();
-    if (run_ee_reco)
-        reconstruct_ee_mass();
+    if (run_pipi_reco) reconstruct_pipi_mass();
+    if (run_KK_reco) reconstruct_KK_mass();
+    if (run_ppi_reco) reconstruct_ppi_mass();
+    if (run_Kpi_reco) reconstruct_Kpi_mass();
+    if (run_Kpipi_reco) reconstruct_Kpipi_mass();
+    if (run_KKpi_reco) reconstruct_KKpi_mass();
+    if (run_pKpi_reco) reconstruct_pKpi_mass();
+    if (run_Lambdapi_reco) reconstruct_Lambdapi_mass();
+    if (run_ee_reco) reconstruct_ee_mass();
 
     se->skip(nSkip);
     se->run(nEvents);
     se->End();
     se->PrintTimer();
 
-    TString qaname = output_dir + "qaOut/HIST_" + nice_runnumber.str() + "_" + nice_segment.str() + "_" + nice_skip.str() + "_QA.root";
-    std::string makeDirectory = "mkdir -p " + output_dir + "qaOut";
-    if (run_pipi_reco)
-    {
-        qaname = pipi_output_dir + "qaOut/HIST_" + nice_runnumber.str() + "_" + nice_segment.str() + "_" + nice_skip.str() + "_QA.root";
-        makeDirectory = "mkdir -p " + pipi_output_dir + "qaOut";
-    }
-    else if (run_Kpi_reco)
-    {
-        qaname = Kpi_output_dir + "qaOut/HIST_" + nice_runnumber.str() + "_" + nice_segment.str() + "_" + nice_skip.str() + "_QA.root";
-        makeDirectory = "mkdir -p " + Kpi_output_dir + "qaOut";
-    }
-    else if (run_KK_reco)
-    {
-        qaname = KK_output_dir + "qaOut/HIST_" + nice_runnumber.str() + "_" + nice_segment.str() + "_" + nice_skip.str() + "_QA.root";
-        makeDirectory = "mkdir -p " + KK_output_dir + "qaOut";
-    }
-    else if (run_ppi_reco)
-    {
-        qaname = ppi_output_dir + "qaOut/HIST_" + nice_runnumber.str() + "_" + nice_segment.str() + "_" + nice_skip.str() + "_QA.root";
-        makeDirectory = "mkdir -p " + ppi_output_dir + "qaOut";
-    }
-    else if (run_ee_reco)
-    {
-        qaname = ee_output_dir + "qaOut/HIST_" + nice_runnumber.str() + "_" + nice_segment.str() + "_" + nice_skip.str() + "_QA.root";
-        makeDirectory = "mkdir -p " + ee_output_dir + "qaOut";
-    }
-    std::cout << "Output QA file: " << qaname << std::endl;
-    system(makeDirectory.c_str());
-    std::string qaOutputFileName(qaname.Data());
-    QA_Output(qaOutputFileName);
-
-    if (run_pipi_reco)
-        end_kfparticle(pipi_output_reco_file, pipi_output_dir);
-    if (run_Kpi_reco)
-        end_kfparticle(Kpi_output_reco_file, Kpi_output_dir);
-    if (run_KK_reco)
-        end_kfparticle(KK_output_reco_file, KK_output_dir);
-    if (run_ppi_reco)
-        end_kfparticle(ppi_output_reco_file, ppi_output_dir);
-    if (run_ee_reco)
-        end_kfparticle(ee_output_reco_file, ee_output_dir);
+    if (run_pipi_reco) end_kfparticle(pipi_output_reco_file, pipi_output_dir);
+    if (run_KK_reco) end_kfparticle(KK_output_reco_file, KK_output_dir);
+    if (run_ppi_reco) end_kfparticle(ppi_output_reco_file, ppi_output_dir);
+    if (run_Kpi_reco) end_kfparticle(Kpi_output_reco_file, Kpi_output_dir);
+    if (run_Kpipi_reco) end_kfparticle(Kpipi_output_reco_file, Kpipi_output_dir);
+    if (run_KKpi_reco) end_kfparticle(KKpi_output_reco_file, KKpi_output_dir);
+    if (run_pKpi_reco) end_kfparticle(pKpi_output_reco_file, pKpi_output_dir);
+    if (run_Lambdapi_reco) end_kfparticle(Lambdapi_output_reco_file, Lambdapi_output_dir);
+    if (run_ee_reco) end_kfparticle(ee_output_reco_file, ee_output_dir);
 
     delete se;
 
