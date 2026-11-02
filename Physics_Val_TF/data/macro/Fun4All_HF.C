@@ -147,23 +147,58 @@ void Fun4All_HF(const int nEvents = 500,
     {
         std::ifstream ifs(inputDST);
         std::string filepath;
-        int i = 0;
+        std::vector<std::string> dstFiles;
         while (std::getline(ifs, filepath))
         {
-            std::cout << "Adding DST with filepath: " << filepath << std::endl;
+            if (!filepath.empty() && filepath.back() == '\r') filepath.pop_back();
+            if (!filepath.empty()) dstFiles.push_back(filepath);
+        }
+        if (dstFiles.empty())
+        {
+            std::cout << "Input list " << inputDST << " is empty! Exit" << std::endl;
+            gSystem->Exit(1);
+        }
+
+        // Raw-hit DSTs (DST_STREAMING_EVENT): each line is a different detector stream of the same
+        // events, so every line gets its own input manager and they run in step (original behaviour).
+        // Any other DST type: the lines are different segments of one stream, so a list with more
+        // than one line goes into ONE input manager that reads the files one after the other.
+        const bool groupIntoOneManager = dstFiles.size() > 1 && dstFiles[0].find("DST_STREAMING_EVENT") == std::string::npos;
+
+        Fun4AllDstInputManager *listin = nullptr;
+        int i = 0;
+        for (const auto &dstFile : dstFiles)
+        {
+            std::cout << "Adding DST with filepath: " << dstFile << std::endl;
             if (i == 0)
             {
-                std::pair<int, int> runseg = Fun4AllUtils::GetRunSegment(filepath);
+                std::pair<int, int> runseg = Fun4AllUtils::GetRunSegment(dstFile);
                 runnumber = runseg.first;
                 segment = runseg.second;
-                runspecies = GetRunInfo(filepath);
-                CheckDstType(filepath);
+                runspecies = GetRunInfo(dstFile);
+                CheckDstType(dstFile);
             }
-            std::string inputname = "InputManager" + std::to_string(i);
-            auto *hitsin = new Fun4AllDstInputManager(inputname);
-            hitsin->fileopen(filepath);
-            se->registerInputManager(hitsin);
+            if (groupIntoOneManager)
+            {
+                if (listin == nullptr)
+                {
+                    listin = new Fun4AllDstInputManager("InputManager");
+                    se->registerInputManager(listin);
+                }
+                listin->AddFile(dstFile);
+            }
+            else
+            {
+                std::string inputname = "InputManager" + std::to_string(i);
+                auto *hitsin = new Fun4AllDstInputManager(inputname);
+                hitsin->fileopen(dstFile);
+                se->registerInputManager(hitsin);
+            }
             i++;
+        }
+        if (groupIntoOneManager)
+        {
+            std::cout << "Read " << dstFiles.size() << " DST files through one input manager; run " << runnumber << ", first segment " << segment << std::endl;
         }
     }
 

@@ -1,16 +1,2 @@
-Universe           = vanilla
-Notification       = Never
-PeriodicHold       = (NumJobStarts>=1 && JobStatus == 1)
-Initialdir         = ./
-Executable         = $(Initialdir)/runHFreco.sh
-request_memory     = 1500MB
-retry_request_memory_increase = RequestMemory + 500
-retry_request_memory_max = 8000MB
-Priority           = 20
-job_lease_duration = 3600
-OutDir             = $(Initialdir)/
-#Output             = $(Initialdir)/log/job-Data-$(Cluster)-$(Process).out
-#Error              = $(Initialdir)/log/job-Data-$(Cluster)-$(Process).err
-Log                = /tmp/job-Data-$(Cluster)-$(Process).log
-Arguments          = $(events) $(file) $(OutDir) $(skip)
-Queue events file dir skip from fileLists/file_run81611_17.list
+# The condor job description lives one directory up: ../myCondor.job
+# Do not condor_submit it directly; use  ../submitCondorJobs.sh <inputDSTlists.txt>
