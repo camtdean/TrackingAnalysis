@@ -452,7 +452,6 @@ void Fun4All_HF(const int nEvents = 500,
 
     if (doRescale)
     {
-      std::string rescaleFolder = runnumber < 80000 ? "run79514_to_79516" : "run81603_to_81612";
       std::string momReweightFile = "/sphenix/u/cdean/analysis/NNScaleMap/run" + to_string(runnumber) + "/kappa_lookup.csv";
 
       auto* momScale = new NNScaleMap("NNScaleMap");
@@ -470,7 +469,7 @@ void Fun4All_HF(const int nEvents = 500,
     if (run_ppi_reco) create_hf_directories(ppi_reconstruction_name, ppi_output_dir, ppi_output_reco_file);
     if (run_Kpi_reco) create_hf_directories(Kpi_reconstruction_name, Kpi_output_dir, Kpi_output_reco_file);
     if (run_Kpipi_reco) create_hf_directories(Kpipi_reconstruction_name, Kpipi_output_dir, Kpipi_output_reco_file);
-    if (run_KKpi_reco) create_hf_directories(KKpi_reconstruction_name, KKpi_output_dir, KLpi_output_reco_file);
+    if (run_KKpi_reco) create_hf_directories(KKpi_reconstruction_name, KKpi_output_dir, KKpi_output_reco_file);
     if (run_pKpi_reco) create_hf_directories(pKpi_reconstruction_name, pKpi_output_dir, pKpi_output_reco_file);
     if (run_Lambdapi_reco) create_hf_directories(Lambdapi_reconstruction_name, Lambdapi_output_dir, Lambdapi_output_reco_file);
     if (run_ee_reco) create_hf_directories(ee_reconstruction_name, ee_output_dir, ee_output_reco_file);
