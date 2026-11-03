@@ -4,8 +4,8 @@ Executable         = $(macroDir)/runHFreco.sh
 Arguments          = $(dstList) $(nEvents) $(outDir) $(nSkip)
 Environment        = "MACRO_DIR=$(macroDir)"
 Initialdir         = $(submitDir)
-request_memory                 = 1400MB
-retry_request_memory_increase  = RequestMemory + 400MB
+request_memory                 = 1800MB
+retry_request_memory_increase  = RequestMemory + 400
 retry_request_memory_max       = 3600MB
 PeriodicHold       = (NumJobStarts>=1 && JobStatus == 1 && !(ON_EVICT_CHECK_RequestMemory_REQUIREMENTS))
 Priority           = 20
@@ -20,7 +20,7 @@ nSkip      = 0
 submitDir  = $ENV(PWD)
 macroDir   = $(submitDir)/macro
 outDir     = $(submitDir)/root/
-logDir     = $(submitDir)/log
+#logDir     = $(submitDir)/log
 
 # The queue line is rewritten by submitCondorJobs.sh for each run: one job per sublist of the run
-Queue dstList from fileLists/run.txt
+Queue dstList from /gpfs/mnt/gpfs02/sphenix/user/cdean/software/TrackingAnalysis/Physics_Val_TF/data/fileLists/run3pp_ana581_2026p005_v001_DST_TRKR_TRACKS/jobs/run79516.txt
