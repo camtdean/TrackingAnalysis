@@ -1,18 +1,11 @@
 #!/bin/bash
-#
-# runHFreco.sh  --  run Fun4All_HF.C on one list of DSTs (one condor job).
-#
 #   runHFreco.sh <inputList | file.root> [nEvents=0] [outDir=<data>/root/] [nSkip=0]
 #
 #   inputList  a sublist made by getFiles.sh (one DST per line)
 #   nEvents    events to process in total over the whole list, 0 = all of them
 #   outDir     top directory for the nTuples (one sub-directory per channel)
 #   nSkip      events to skip at the start of the list
-#
-# Inputs are read where they are (Fun4All resolves bare names through the file catalogue):
-# nothing is copied to /tmp or to the worker's scratch disk.
 
-# --- environment (same as the twoTrack scripts) -----------------------------
 source /opt/sphenix/core/bin/sphenix_setup.sh -n new
 
 export USER="$(id -u -n)"
@@ -79,7 +72,6 @@ echo "  events  : ${nEvents} (0 = all)   skip: ${nSkip}"
 echo "  output  : ${outDir}"
 echo "  macro   : ${macroDir}/Fun4All_HF.C"
 
-# --- run ---------------------------------------------------------------------
 cd "${macroDir}" || exit 2
 
 rootLog=$(mktemp "${_CONDOR_SCRATCH_DIR:-${TMPDIR:-/tmp}}/runHFreco.XXXXXX.log")
