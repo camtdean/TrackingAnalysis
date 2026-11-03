@@ -858,6 +858,9 @@ void reconstruct_Lambdapi_mass()
   intermediate_PV_DCAchi2_range.push_back(std::make_pair(0., 400.));
   kfparticle->setIntermediatePV_DCA_StdDevRange(intermediate_PV_DCAchi2_range);
 
+  kfparticle->setIntermediatePV_DCARange_XY(intermediate_PV_DCA_range);
+  kfparticle->setIntermediatePV_DCA_StdDevRange_XY(intermediate_PV_DCAchi2_range);
+
   std::vector<float> intermediate_min_dira = {0.90};
   kfparticle->setIntermediateMinDIRA(intermediate_min_dira);
 
