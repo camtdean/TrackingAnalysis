@@ -1,16 +1,26 @@
 Universe           = vanilla
 Notification       = Never
-PeriodicHold       = (NumJobStarts>=1 && JobStatus == 1)
-Initialdir         = ./
-Executable         = $(Initialdir)/macro/runHFreco.sh
-request_memory     = 1800MB
-retry_request_memory_increase = RequestMemory + 400
-retry_request_memory_max = 3600MB
+Executable         = $(macroDir)/runHFreco.sh
+Arguments          = $(dstList) $(nEvents) $(outDir) $(nSkip)
+Environment        = "MACRO_DIR=$(macroDir)"
+Initialdir         = $(submitDir)
+request_memory                 = 1400MB
+retry_request_memory_increase  = RequestMemory + 400MB
+retry_request_memory_max       = 3600MB
+PeriodicHold       = (NumJobStarts>=1 && JobStatus == 1 && !(ON_EVICT_CHECK_RequestMemory_REQUIREMENTS))
 Priority           = 20
 job_lease_duration = 3600
-OutDir             = $(Initialdir)/root/
-Output             = $(Initialdir)/log/job-Data-$(Cluster)-$(Process).out
-Error              = $(Initialdir)/log/job-Data-$(Cluster)-$(Process).err
-Log                = /tmp/job-Data-$(Cluster)-$(Process).log
-Arguments          = $(events) $(file) $(OutDir) $(skip)
-Queue events file skip from fileLists/file_run53877_0.list
+#Output             = $(logDir)/job-$(Cluster)-$(Process).out
+#Error              = $(logDir)/job-$(Cluster)-$(Process).err
+Log                = /tmp/job-HF-$(Cluster)-$(Process).log
+nEvents    = 0
+nSkip      = 0
+
+# Locations: the directory this file is in (submitCondorJobs.sh runs from there)
+submitDir  = $ENV(PWD)
+macroDir   = $(submitDir)/macro
+outDir     = $(submitDir)/root/
+logDir     = $(submitDir)/log
+
+# The queue line is rewritten by submitCondorJobs.sh for each run: one job per sublist of the run
+Queue dstList from fileLists/run.txt

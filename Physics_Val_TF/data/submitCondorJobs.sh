@@ -1,31 +1,16 @@
 #!/bin/bash
 
+cd "$(dirname "$(readlink -f "$0")")"       # work from this directory, wherever it is called from
+
 submissionFile=myCondor.job
+runLists=fileLists/inputDSTlists.txt        # one line per run, written by getFiles.sh
 
-listDir=fileLists
+[ -r ${runLists} ] || { echo "${runLists} not found, run ./getFiles.sh first"; exit 1; }
+mkdir -p log root
 
-runs="81611"
-
-for run in $runs
+for runList in $(cat ${runLists})
 do
-  nFiles=$(($(ls -l ${listDir}/file_run${run}_*.list | wc -l) - 1))
-
-  for i in  $(seq 0 $nFiles) 
-  do
-  
-    i=$(printf "%02d" $i)
-  
-    currentOptionsFile=$(grep 'Queue' ${submissionFile} | awk '{print $NF}' | awk -F "/" '{print $NF}')
-    newOptionsFile=file_run${run}_$i.list
-  
-    if [ -f ${listDir}/${newOptionsFile} ]; then
-      echo "Current options file: ${currentOptionsFile}"
-      echo "New options file:  ${newOptionsFile}s"
-      sed -i -e "s/${currentOptionsFile}/${newOptionsFile}/g" ${submissionFile}
-      condor_submit ${submissionFile}
-    else
-      echo "File ${newOptionsFile} is missing"
-    fi
-  
-  done
+  echo "Submitting ${runList}"
+  sed -i -e "s|^Queue.*|Queue dstList from ${runList}|" ${submissionFile}
+  condor_submit ${submissionFile}
 done
