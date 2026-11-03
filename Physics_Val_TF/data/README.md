@@ -1,42 +1,64 @@
 # Data macro for Physics Validation TF
 This support starting from any level of DSTs, and produce various QA outputs
 
-Workflow: ``getFiles.sh`` finds the DSTs and writes sublists plus a top list, ``submitCondorJobs.sh`` queues one condor job per sublist, ``macro/runHFreco.sh`` runs ``Fun4All_HF.C`` on one sublist.
+**To run on data: two steps.**
+
+1. Edit the block at the top of ``getFiles.sh`` and run it
+```
+runs=(79516 79515)                    # run numbers
+species=run3pp
+buildTag=ana581_2026p005_v001         # FileCatalog tag
+dstType=DST_TRKR_TRACKS               # any DST type
+dstsPerJob=100
+```
+```
+./getFiles.sh
+```
+2. Submit
+```
+./submitCondorJobs.sh
+```
+(``sh getFiles.sh`` / ``sh submitCondorJobs.sh`` work too.)
+
+``getFiles.sh`` finds the DSTs of those runs in the FileCatalog, splits each run into lists of ``dstsPerJob`` DSTs and writes ``fileLists/inputDSTlists.txt`` (one line per run). ``submitCondorJobs.sh`` is a short loop: for each run in that file it puts the run's list in the ``Queue`` line of ``myCondor.job`` and calls ``condor_submit``, so each run is one condor cluster with one job per list. Everything else (events per job, memory and retries, output directory, logs) is set in ``myCondor.job``.
+
+It is worth testing first by setting ``nEvents = 2000`` in ``myCondor.job`` (0 = all events) and using one or two runs.
 
 - Obtain DST lists
 
+All the options are in ``getFiles.sh`` and all of them are optional: they override the block at the top.
 ```
-./getFiles.sh 79516                                   # DSTs of run 79516 from the FileCatalog (default tag/type below)
-./getFiles.sh -n 50 79514 79515 79516                 # 50 DSTs per job
-./getFiles.sh --all-runs -b ana581_2026p005_v001      # every run the catalogue has for that tag and type
+./getFiles.sh                                         # the settings at the top
+./getFiles.sh 79516 79517                             # these runs instead of the array
+./getFiles.sh --all-runs                              # every run the catalogue has for the tag and DST type
+./getFiles.sh -n 50                                   # 50 DSTs per job
 ./getFiles.sh -t DST_TRKR_SEED -b ana571_2026p002_v001 79516
 ./getFiles.sh -r runs.txt                             # run numbers from a file
-./getFiles.sh --from-dirs 79516                       # search the lustre production directories instead
+./getFiles.sh --from-dirs                             # search the lustre production directories instead
 ./getFiles.sh -f my_files.txt                         # use a list of DST names you made yourself
 ./getFiles_rawhit.sh 79516                            # raw-hit DSTs (DST_STREAMING_EVENT)
 ```
-The defaults are at the top of ``getFiles.sh`` (``SPECIES=run3pp``, ``BUILD_TAG=ana573_2026p003_v001``, ``DST_TYPE=DST_TRKR_TRACKS``, ``PER_JOB=100``) and can be overridden with ``-s -b -t -n`` or environment variables. ``./getFiles.sh --help`` lists everything.
-Any DST type can be used (``DST_TRKR_TRACKS``, ``DST_TRKR_SEED``, ``DST_TRKR_CLUSTER``, ``DST_COMBINED``, ...).
+``./getFiles.sh --help`` lists everything. Any DST type can be used (``DST_TRKR_TRACKS``, ``DST_TRKR_SEED``, ``DST_TRKR_CLUSTER``, ``DST_COMBINED``, ...).
 
 Where the files come from: by default the FileCatalog. ``--all-runs`` runs
 ```
 psql FileCatalog -c "select distinct(runnumber) from datasets where tag='<tag>' and dsttype='<type>'"
 ```
-and each run's files come from ``CreateDstList.pl --run <run> --tag <tag> <type>`` (both need an sPHENIX node with the environment set up). Only files of the chosen species (``-s``) are kept. Raw-hit DSTs are not looked up in the catalogue: they are searched for in the production directories, and ``--all-runs`` does not apply to them.
+and each run's files come from ``CreateDstList.pl --run <run> --tag <tag> <type>`` (both need an sPHENIX node with the environment set up). Only files of the chosen species are kept. Raw-hit DSTs are not looked up in the catalogue: they are searched for in the production directories, and ``--all-runs`` does not apply to them.
 
-Output goes to ``fileLists/<species>_<buildtag>_<dsttype>/``:
+Output goes to ``fileLists/`` next to the script:
 ```
-runs/run<N>.list              every DST found for the run
-sublists/run<N>_NNNN.list     at most --per-job DSTs each = one condor job
-jobs/run<N>.txt               the sublists of run N (what one condor submission queues)
-inputDSTlists.txt             top list: the path of every jobs/run<N>.txt
+inputDSTlists.txt                      top list: one jobs/run<N>.txt per run of this call (what condor reads)
+<set>/jobs/run<N>.txt                  the sublists of run N (one condor submission)
+<set>/sublists/run<N>_NNNN.list        at most dstsPerJob DSTs each = one condor job
+<set>/runs/run<N>.list                 every DST found for the run
 ```
+``<set>`` is ``<species>_<buildtag>_<dsttype>``. The top list holds the runs of the latest ``getFiles.sh`` call only, so earlier runs are not resubmitted, and the lists of those runs are rebuilt every time (picking up new segments is just rerunning).
 The lists hold bare file names. Fun4All finds them through the file catalogue and the files are read where they are: nothing is copied to /tmp or the worker node.
-A ``getFiles.sh`` call refuses to overwrite the sublists of a run that already has some (use ``--force``); calling it again with other runs adds to the same top list.
 
-Raw-hit DSTs: every detector stream of a segment must be read by the same job, so each sublist is one segment (one line per stream, 63 for run3). Only segments present in all streams are used, and missing ones are reported. ``--per-job`` is ignored.
+Raw-hit DSTs: every detector stream of a segment must be read by the same job, so each sublist is one segment (one line per stream, 63 for run3). Only segments present in all streams are used, and missing ones are reported. ``dstsPerJob`` is ignored.
 
-How many DSTs per job: all events of the DSTs in a sublist are processed by one job through a single input manager, so ``--per-job`` trades the number of jobs against the length of each. Use ``-e`` / ``--skip`` of ``submitCondorJobs.sh`` to cut a quick test short.
+How many DSTs per job: all events of the DSTs in a list are processed by one job through a single input manager, so ``dstsPerJob`` trades the number of jobs against the length of each.
 
 - Macro set up
 
@@ -132,17 +154,12 @@ Otherwise, for general analysis purpose, set it to true so that the track moment
 
 - Submit jobs
 
-```
-./submitCondorJobs.sh --limit 2 -e 2000 fileLists/<set>/inputDSTlists.txt    # quick test: 2 jobs per run, 2000 events each
-./submitCondorJobs.sh fileLists/<set>/inputDSTlists.txt                       # everything in the top list
-./submitCondorJobs.sh --dry-run fileLists/<set>/inputDSTlists.txt             # write the submit files, do not submit
-```
-Each run in the top list is one ``condor_submit`` (one cluster), with one job per sublist of that run, so ``condor_q`` / ``condor_rm`` work per run. It checks that every list exists before submitting anything, shows the jobs per run and asks for confirmation. The submit files it writes next to the top list (``submit_<date>_run<N>.job`` = ``myCondor.job`` + the values used) show exactly what was run. ``myCondor.job`` is never edited, and no ``log/`` directory has to be created by hand.
-Options: ``-e`` events per job (0 = all), ``--skip``, ``-o`` output directory (default ``root/<set>/``), ``-m`` / ``--memory-step`` / ``--max-memory`` (MB), ``--limit`` (sublists per run), ``-y``, ``--dry-run``.
+``./submitCondorJobs.sh`` (see the top). It is 20 lines: read ``fileLists/inputDSTlists.txt`` and, for each run, ``sed`` the ``Queue dstList from ...`` line of ``myCondor.job`` to that run's list and ``condor_submit`` it. Change what a job does by editing ``myCondor.job`` (``nEvents``, ``nSkip``, memory, ``outDir``, ``logDir``, priority); the Queue line is the only one the script rewrites.
+Output goes to ``root/<channel>/`` and, if the ``Output``/``Error`` lines in ``myCondor.job`` are uncommented, condor stdout/stderr to ``log/``.
 
-Memory: a job starts with ``request_memory`` (2000 MB by default). If condor evicts it for using more, it is retried with ``--memory-step`` more (1000 MB) up to ``--max-memory`` (8000 MB) instead of being held. Change the defaults at the bottom of ``myCondor.job``. These numbers are a starting point: look at the memory use of your first jobs and adjust.
+Memory: set in ``myCondor.job`` (``request_memory``, ``retry_request_memory_increase``, ``retry_request_memory_max``). If condor evicts a job for using more memory, it is retried with more, up to the maximum, instead of being held. Look at the memory use of your first jobs and adjust there.
 
-Output and logs: nTuples/QA files go to ``root/<set>/<channel>/``, condor ``out``/``err`` files to ``log/<set>/run<N>/``.
+Output and logs: nTuples/QA files go to ``root/<set>/<channel>/``.
 To run one list by hand: ``macro/runHFreco.sh fileLists/<set>/sublists/run79516_0000.list 1000 root/test/``. It exits non-zero if the macro does not run to the end, so condor sees the failure.
 Set ``USE_LOCAL_INSTALL=false`` in the environment to use the release libraries instead of ``$HOME/sPHENIX/install``.
 

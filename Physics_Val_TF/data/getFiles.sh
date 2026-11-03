@@ -1,11 +1,18 @@
 #!/bin/bash
 #
-# getFiles.sh  --  find DSTs, split them into sublists, and write the top list condor reads.
+# getFiles.sh  --  find the DSTs of your runs, split them into sublists, write the top list for condor.
 #
-#   fileLists/<NAME>/runs/run<RUN>.list           every DST of the run (one per line)
-#   fileLists/<NAME>/sublists/run<RUN>_NNNN.list  <= --per-job DSTs each (one condor job each)
-#   fileLists/<NAME>/jobs/run<RUN>.txt            path of every sublist of that run (one condor submission per run)
-#   fileLists/<NAME>/inputDSTlists.txt            path of every jobs/run<RUN>.txt (what submitCondorJobs.sh reads)
+#   1. edit the block "WHAT TO GET" below (run array, species, tag, DST type, DSTs per job)
+#   2. ./getFiles.sh
+#   3. ./submitCondorJobs.sh
+#
+# Output, under fileLists/ next to this script:
+#   fileLists/inputDSTlists.txt                   the top list: one line per run (what submitCondorJobs.sh reads)
+#   fileLists/<set>/jobs/run<RUN>.txt             that run's sublists (one condor submission per run)
+#   fileLists/<set>/sublists/run<RUN>_NNNN.list   <= dstsPerJob DSTs each (one condor job each)
+#   fileLists/<set>/runs/run<RUN>.list            every DST found for the run
+# <set> is <species>_<tag>_<dsttype>. The top list holds the runs of this call only, and the lists of
+# those runs are rebuilt each time, so rerunning picks up new files.
 #
 # Where the DSTs come from:
 #   default       the FileCatalog: runs from psql (--all-runs), files from CreateDstList.pl
@@ -16,24 +23,31 @@
 # Raw-hit DSTs (DST_STREAMING_EVENT) need every detector stream of one segment in one job, so they
 # are searched for in the directories and are always one segment per sublist.
 #
-# Run  ./getFiles.sh --help  for options.
+# Options (all optional, they override the block): ./getFiles.sh --help
+
+# run under bash even if started as "sh getFiles.sh"
+[ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 
 set -euo pipefail
 
-# ---------------------------------------------------------------------------
-# Defaults: edit here or override on the command line / environment.
-# ---------------------------------------------------------------------------
-SPECIES=${SPECIES:-run3pp}                         # run3pp, run3auau, run3oo, run2pp
-BUILD_TAG=${BUILD_TAG:-ana573_2026p003_v001}      # <anabuild>_<cdbtag>_<version>, e.g. new_nocdbtag_v001 for raw hits
-DST_TYPE=${DST_TYPE:-DST_TRKR_TRACKS}
+# =============================== WHAT TO GET ===============================
+runs=(79516 79515)                    # run numbers
+species=run3pp                        # run3pp, run3auau, run3oo, run2pp
+buildTag=ana581_2026p005_v001         # <anabuild>_<cdbtag>_<version>, i.e. the FileCatalog tag
+dstType=DST_TRKR_TRACKS               # any DST type: DST_TRKR_TRACKS, DST_TRKR_SEED, DST_TRKR_CLUSTER, ...
+dstsPerJob=100                        # DSTs in each condor job
+# ===========================================================================
+
+SPECIES=${species}; BUILD_TAG=${buildTag}; DST_TYPE=${dstType}; PER_JOB=${dstsPerJob}
 RUN_TYPE=${RUN_TYPE:-physics}
-PER_JOB=${PER_JOB:-100}                            # DSTs per sublist, i.e. per condor job
 PRODUCTION_DIR=${PRODUCTION_DIR:-/sphenix/lustre01/sphnxpro/production}
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [options] RUN [RUN ...]
-       $(basename "$0") [options] --all-runs
+Usage: $(basename "$0") [options] [RUN ...]
+
+With no arguments the settings at the top of this script ("WHAT TO GET") are used. RUN numbers on the
+command line replace the run array.
 
 Options:
   -s, --species S        run3pp | run3auau | run3oo | run2pp          (default: ${SPECIES})
@@ -44,7 +58,7 @@ Options:
   -n, --per-job N        DSTs per sublist = per condor job             (default: ${PER_JOB})
   -r, --runs-file F      file of run numbers (whitespace separated, '#' starts a comment)
       --all-runs         every run the FileCatalog has for this build tag and DST type
-                         (psql FileCatalog); combined with RUN arguments it is an error
+                         (psql FileCatalog) instead of the run array
       --from-dirs        look in the production directories instead of the FileCatalog
   -f, --from-list F      build the lists from file F, which holds DST names or paths, one per line.
                          Run numbers are read from the file names; RUN arguments, if given, filter.
@@ -52,12 +66,12 @@ Options:
                          (bare names are resolved by Fun4All through the file catalogue;
                           full paths need --from-dirs or --from-list)
       --name TAG         name of the list set       (default: <species>_<build-tag>_<dst-type>)
-  -o, --out-dir D        directory holding the list sets                (default: fileLists)
+  -o, --out-dir D        directory holding the list sets                (default: <this directory>/fileLists)
       --production-dir D top of the production area                     (default: ${PRODUCTION_DIR})
-      --force            replace lists that already exist for a run
   -h, --help             this text
 
 Examples:
+  $(basename "$0")
   $(basename "$0") 79516
   $(basename "$0") --all-runs -b ana581_2026p005_v001
   $(basename "$0") -n 50 -t DST_TRKR_SEED -b ana571_2026p002_v001 79514 79515 79516
@@ -73,14 +87,13 @@ note() { echo "$*"; }
 # ---------------------------------------------------------------------------
 # Arguments
 # ---------------------------------------------------------------------------
-OUT_ROOT=fileLists
+OUT_ROOT=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)/fileLists   # next to this script, wherever you run it from
 NAME=""
 RUNS_FILE=""
 FROM_LIST=""
 ALL_RUNS=false
 FROM_DIRS=false
 FULL_PATHS=false
-FORCE=false
 RUNS=()
 PER_JOB_SET=false
 
@@ -99,7 +112,7 @@ while [[ $# -gt 0 ]]; do
     --name)              [[ $# -ge 2 ]] || die "$1 needs a value"; NAME=$2; shift 2 ;;
     -o|--out-dir)        [[ $# -ge 2 ]] || die "$1 needs a value"; OUT_ROOT=$2; shift 2 ;;
     --production-dir)    [[ $# -ge 2 ]] || die "$1 needs a value"; PRODUCTION_DIR=$2; shift 2 ;;
-    --force)             FORCE=true; shift ;;
+    --force)             shift ;;   # lists are always rebuilt; accepted for old command lines
     -h|--help)           usage; exit 0 ;;
     --)                  shift; while [[ $# -gt 0 ]]; do RUNS+=("$1"); shift; done ;;
     -*)                  usage >&2; die "unknown option: $1" ;;
@@ -114,13 +127,16 @@ if [[ -n "${RUNS_FILE}" ]]; then
   done < <(sed 's/#.*//' "${RUNS_FILE}" | tr -s '[:space:]' '\n')
 fi
 
+if [[ ${#RUNS[@]} -eq 0 ]] && ! ${ALL_RUNS} && [[ -z "${FROM_LIST}" ]]; then
+  RUNS=(${runs[@]+"${runs[@]}"})      # nothing asked for on the command line: the array at the top
+fi
+
 [[ "${PER_JOB}" =~ ^[1-9][0-9]*$ ]] || die "--per-job must be a positive integer (got '${PER_JOB}')"
 for r in ${RUNS[@]+"${RUNS[@]}"}; do
   [[ "$r" =~ ^[0-9]+$ ]] || die "'$r' is not a run number"
 done
 if [[ -z "${FROM_LIST}" && ${#RUNS[@]} -eq 0 ]] && ! ${ALL_RUNS}; then
-  usage >&2
-  die "give at least one run number (or --all-runs / --runs-file / --from-list)"
+  die "no runs: fill in the runs array at the top of $(basename "$0"), or give run numbers / --all-runs / --runs-file / --from-list"
 fi
 if ${ALL_RUNS} && [[ ${#RUNS[@]} -gt 0 ]]; then die "--all-runs cannot be combined with run numbers"; fi
 if [[ -n "${FROM_LIST}" ]]; then
@@ -164,6 +180,7 @@ SUB_DIR=${OUT_DIR}/sublists
 JOBS_DIR=${OUT_DIR}/jobs
 mkdir -p "${RUNS_DIR}" "${SUB_DIR}" "${JOBS_DIR}"
 OUT_DIR_ABS=$(cd "${OUT_DIR}" && pwd)
+OUT_ROOT_ABS=$(cd "${OUT_ROOT}" && pwd)
 JOBS_ABS=${OUT_DIR_ABS}/jobs
 
 # ---------------------------------------------------------------------------
@@ -210,25 +227,22 @@ streams() {
 
 # remember what was written
 N_RUNS_DONE=0
+DONE_RUNS=()     # runs written by this call: they, and only they, go in the top list
 N_JOBS_TOTAL=0
 
 # write the sublists of one run from its full list ($1 = run, $2 = list of names/paths)
 make_sublists() {
-  local run=$1 list=$2 r8 n existing
+  local run=$1 list=$2 r8 n
   r8=$(run8 "${run}"); rn=$((10#${run}))
   n=$(wc -l < "${list}" | tr -d ' ')
-  existing=$(find "${SUB_DIR}" -maxdepth 1 -name "run${rn}_*.list" | wc -l | tr -d ' ')
-  if [[ "${existing}" != "0" ]]; then
-    ${FORCE} || die "sublists for run ${run} already exist in ${SUB_DIR} (use --force to replace them)"
-    find "${SUB_DIR}" -maxdepth 1 -name "run${rn}_*.list" -exec rm -f {} +
-  fi
+  find "${SUB_DIR}" -maxdepth 1 -name "run${rn}_*.list" -exec rm -f {} +      # rebuilt from scratch
   awk -v n="${PER_JOB}" -v pre="${SUB_DIR}/run${rn}_" '
     (NR-1)%n==0 { if (f) close(f); f=sprintf("%s%04d.list", pre, c++) }
     { print > f }' "${list}"
   local nsub
   nsub=$(find "${SUB_DIR}" -maxdepth 1 -name "run${rn}_*.list" | wc -l | tr -d ' ')
   note "run ${run}: ${n} DST(s) -> ${nsub} sublist(s) of up to ${PER_JOB}"
-  N_RUNS_DONE=$((N_RUNS_DONE + 1))
+  N_RUNS_DONE=$((N_RUNS_DONE + 1)); DONE_RUNS+=("${rn}")
   N_JOBS_TOTAL=$((N_JOBS_TOTAL + nsub))
 }
 
@@ -236,7 +250,7 @@ make_sublists() {
 # Discovery
 # ---------------------------------------------------------------------------
 discover_streaming() {   # $1 = run  ->  writes one sublist per segment, returns 0 if any
-  local run=$1 r8 s dir seg tmp common nseg segdir f existing nmiss
+  local run=$1 r8 s dir seg tmp common nseg segdir f nmiss
   r8=$(run8 "${run}"); rn=$((10#${run}))
   tmp=$(mktemp -d)
   : > "${tmp}/common"
@@ -263,11 +277,7 @@ discover_streaming() {   # $1 = run  ->  writes one sublist per segment, returns
     fi
   done
   : > "${RUNS_DIR}/run${rn}.list.tmp"
-  existing=$(find "${SUB_DIR}" -maxdepth 1 -name "run${rn}_seg*.list" | wc -l | tr -d ' ')
-  if [[ "${existing}" != "0" ]]; then
-    ${FORCE} || die "sublists for run ${run} already exist in ${SUB_DIR} (use --force to replace them)"
-    find "${SUB_DIR}" -maxdepth 1 -name "run${rn}_seg*.list" -exec rm -f {} +
-  fi
+  find "${SUB_DIR}" -maxdepth 1 -name "run${rn}_seg*.list" -exec rm -f {} +  # rebuilt from scratch
   while read -r seg; do
     segdir=${SUB_DIR}/run${rn}_seg${seg}.list
     : > "${segdir}.tmp"
@@ -281,7 +291,7 @@ discover_streaming() {   # $1 = run  ->  writes one sublist per segment, returns
   done < "${tmp}/common"
   mv "${RUNS_DIR}/run${rn}.list.tmp" "${RUNS_DIR}/run${rn}.list"
   note "run ${run}: ${common} segment(s) with all $(streams | wc -l | tr -d ' ') streams -> ${common} sublist(s), one segment each"
-  N_RUNS_DONE=$((N_RUNS_DONE + 1)); N_JOBS_TOTAL=$((N_JOBS_TOTAL + common))
+  N_RUNS_DONE=$((N_RUNS_DONE + 1)); DONE_RUNS+=("${rn}"); N_JOBS_TOTAL=$((N_JOBS_TOTAL + common))
   rm -rf "${tmp}"
   return 0
 }
@@ -390,12 +400,12 @@ if [[ "${N_RUNS_DONE}" == "0" ]]; then
   die "nothing was written: no files found (see the warnings above)"
 fi
 
-# per-run job lists (jobs/run<N>.txt: the sublists of one run) and the top list (every jobs/run<N>.txt),
-# rebuilt from all sublists in the set and each written in one step
-top=${OUT_DIR_ABS}/inputDSTlists.txt
+# per-run job lists (jobs/run<N>.txt: the sublists of one run) and the top list (one jobs/run<N>.txt per
+# run of THIS call), each written in one step. The top list sits in fileLists/ so there is one place to look.
+top=${OUT_ROOT_ABS}/inputDSTlists.txt
 : > "${top}.tmp"
 nruns=0; njobs=0
-for r in $(find "${OUT_DIR_ABS}/sublists" -maxdepth 1 -name 'run*_*.list' | sed -E 's#.*/run([0-9]+)_[^/]*$#\1#' | LC_ALL=C sort -un); do
+for r in $(printf '%s\n' "${DONE_RUNS[@]}" | LC_ALL=C sort -un); do
   find "${OUT_DIR_ABS}/sublists" -maxdepth 1 -name "run${r}_*.list" | LC_ALL=C sort > "${JOBS_ABS}/run${r}.txt.tmp"
   mv "${JOBS_ABS}/run${r}.txt.tmp" "${JOBS_ABS}/run${r}.txt"
   echo "${JOBS_ABS}/run${r}.txt" >> "${top}.tmp"
@@ -405,5 +415,9 @@ mv "${top}.tmp" "${top}"
 
 note ""
 note "Top list: ${top}"
-note "  ${nruns} run(s) = ${nruns} condor submission(s), ${njobs} job(s) in total ( ${N_JOBS_TOTAL} added by this call )"
-note "Submit with:  ./submitCondorJobs.sh ${top}"
+note "  ${nruns} run(s) = ${nruns} condor submission(s), ${njobs} job(s) in total"
+if [[ "${top}" == "$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)/fileLists/inputDSTlists.txt" ]]; then
+  note "Submit with:  ./submitCondorJobs.sh"
+else
+  note "Submit with:  ./submitCondorJobs.sh ${top}"
+fi

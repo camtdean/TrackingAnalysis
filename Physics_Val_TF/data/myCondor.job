@@ -1,34 +1,26 @@
-# Condor submit description for Fun4All_HF.C.
-# Do not run condor_submit on this file directly: use ./submitCondorJobs.sh <inputDSTlists.txt>,
-# which supplies the values marked "set by submitCondorJobs.sh" and queues one job per sublist.
-#
-# Memory: a job starts with request_memory. If it is evicted for using more, condor retries it
-# with retry_request_memory_increase more, up to retry_request_memory_max, instead of holding it.
-# Change the numbers here or with  submitCondorJobs.sh --memory / --memory-step / --max-memory.
-
 Universe           = vanilla
 Notification       = Never
 Executable         = $(macroDir)/runHFreco.sh
 Arguments          = $(dstList) $(nEvents) $(outDir) $(nSkip)
 Environment        = "MACRO_DIR=$(macroDir)"
 Initialdir         = $(submitDir)
-
-request_memory                 = $(memory)
-retry_request_memory_increase  = RequestMemory + $(memoryStep)
-retry_request_memory_max       = $(maxMemory)
+request_memory                 = 1400MB
+retry_request_memory_increase  = RequestMemory + 400MB
+retry_request_memory_max       = 3600MB
 PeriodicHold       = (NumJobStarts>=1 && JobStatus == 1 && !(ON_EVICT_CHECK_RequestMemory_REQUIREMENTS))
 Priority           = 20
 job_lease_duration = 3600
-
-Output             = $(logDir)/job-$(Cluster)-$(Process).out
-Error              = $(logDir)/job-$(Cluster)-$(Process).err
+#Output             = $(logDir)/job-$(Cluster)-$(Process).out
+#Error              = $(logDir)/job-$(Cluster)-$(Process).err
 Log                = /tmp/job-HF-$(Cluster)-$(Process).log
-
-# Defaults, overridden by submitCondorJobs.sh:
 nEvents    = 0
 nSkip      = 0
-memory     = 2000MB
-memoryStep = 1000
-maxMemory  = 8000MB
 
-# Set by submitCondorJobs.sh: submitDir, macroDir, outDir, logDir and the queue statement
+# Locations: the directory this file is in (submitCondorJobs.sh runs from there)
+submitDir  = $ENV(PWD)
+macroDir   = $(submitDir)/macro
+outDir     = $(submitDir)/root/
+logDir     = $(submitDir)/log
+
+# The queue line is rewritten by submitCondorJobs.sh for each run: one job per sublist of the run
+Queue dstList from fileLists/run.txt
