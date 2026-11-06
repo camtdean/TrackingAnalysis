@@ -115,6 +115,7 @@ namespace HeavyFlavorReco
   float cemc_proj_radius = 102.9; //Virgile recommendation according to DetailedCalorimeterGeometry
   bool constrain_lambda_mass = true;
   bool extrapolate_tracks_to_secondary_vertex = false; // Set to false to ensure the pT map is accurate for asymmetry study
+  bool use_ordered_prong_combinations = true;
 
   //Unused: values that switch a cut off, shared by every channel.
   float unused_cuts_setMotherPV_DCA{FLT_MAX};
@@ -229,6 +230,7 @@ void reconstruct_pipi_mass()
   kfparticle->saveParticleContainer(true);
   kfparticle->magFieldFile("FIELDMAP_TRACKING");
   if (doRescale) kfparticle->setTrackMapNodeName(momReweightTrackMap.c_str());
+  kfparticle->useOrderedProngCombinations(use_ordered_prong_combinations);
 
   //PV to SV cuts
   kfparticle->constrainToPrimaryVertex();
@@ -298,6 +300,7 @@ void reconstruct_KK_mass()
   kfparticle->saveParticleContainer(true);
   kfparticle->magFieldFile("FIELDMAP_TRACKING");
   if (doRescale) kfparticle->setTrackMapNodeName(momReweightTrackMap.c_str());
+  kfparticle->useOrderedProngCombinations(use_ordered_prong_combinations);
 
   //PV to SV cuts
   kfparticle->constrainToPrimaryVertex();
@@ -355,6 +358,7 @@ void reconstruct_ppi_mass()
   kfparticle->saveParticleContainer(true);
   kfparticle->magFieldFile("FIELDMAP_TRACKING");
   if (doRescale) kfparticle->setTrackMapNodeName(momReweightTrackMap.c_str());
+  kfparticle->useOrderedProngCombinations(use_ordered_prong_combinations);
 
   //PV to SV cuts
   kfparticle->constrainToPrimaryVertex();
@@ -425,6 +429,7 @@ void reconstruct_Kpi_mass()
   kfparticle->saveParticleContainer(true);
   kfparticle->magFieldFile("FIELDMAP_TRACKING");
   if (doRescale) kfparticle->setTrackMapNodeName(momReweightTrackMap.c_str());
+  kfparticle->useOrderedProngCombinations(use_ordered_prong_combinations);
 
   //PV to SV cuts
   kfparticle->constrainToPrimaryVertex();
@@ -497,6 +502,7 @@ void reconstruct_Kpipi_mass()
   kfparticle->saveParticleContainer(true);
   kfparticle->magFieldFile("FIELDMAP_TRACKING");
   if (doRescale) kfparticle->setTrackMapNodeName(momReweightTrackMap.c_str());
+  kfparticle->useOrderedProngCombinations(use_ordered_prong_combinations);
 
   //PV to SV cuts
   kfparticle->constrainToPrimaryVertex();
@@ -569,6 +575,7 @@ void reconstruct_KKpi_mass()
   kfparticle->saveParticleContainer(true);
   kfparticle->magFieldFile("FIELDMAP_TRACKING");
   if (doRescale) kfparticle->setTrackMapNodeName(momReweightTrackMap.c_str());
+  kfparticle->useOrderedProngCombinations(use_ordered_prong_combinations);
 
   //PV to SV cuts
   kfparticle->constrainToPrimaryVertex();
@@ -641,6 +648,7 @@ void reconstruct_pKpi_mass()
   kfparticle->saveParticleContainer(true);
   kfparticle->magFieldFile("FIELDMAP_TRACKING");
   if (doRescale) kfparticle->setTrackMapNodeName(momReweightTrackMap.c_str());
+  kfparticle->useOrderedProngCombinations(use_ordered_prong_combinations);
 
   //PV to SV cuts
   kfparticle->constrainToPrimaryVertex();
@@ -712,6 +720,7 @@ void reconstruct_ee_mass()
   kfparticle->saveParticleContainer(true);
   kfparticle->magFieldFile("FIELDMAP_TRACKING");
   if (doRescale) kfparticle->setTrackMapNodeName(momReweightTrackMap.c_str());
+  kfparticle->useOrderedProngCombinations(use_ordered_prong_combinations);
 
   //PV to SV cuts
   kfparticle->constrainToPrimaryVertex();
@@ -803,6 +812,7 @@ void reconstruct_Lambdapi_mass()
   kfparticle->saveParticleContainer(true);
   kfparticle->magFieldFile("FIELDMAP_TRACKING");
   if (doRescale) kfparticle->setTrackMapNodeName(momReweightTrackMap.c_str());
+  kfparticle->useOrderedProngCombinations(use_ordered_prong_combinations);
 
   //PV to SV cuts
   kfparticle->constrainToPrimaryVertex();
@@ -869,6 +879,11 @@ void reconstruct_Lambdapi_mass()
 
   std::vector<float> intermediate_max_vertex_vol = {1.1};
   kfparticle->setIntermediateMaxVertexVolume(intermediate_max_vertex_vol);
+
+  kfparticle->setIntermediateDecayLengthRange({{0.1, 80.}});
+  kfparticle->setIntermediateDecayLengthRange_XY({{0, FLT_MAX}});
+  kfparticle->setIntermediateDecayTimeRange({{0, FLT_MAX}});
+  kfparticle->setIntermediateDecayTimeRange_XY({{0, FLT_MAX}});
 
   kfparticle->setOutputName(Lambdapi_output_reco_file);
 
